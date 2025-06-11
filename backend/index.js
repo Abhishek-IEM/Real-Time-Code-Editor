@@ -1,6 +1,7 @@
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
+import path from "path";
 import axios from "axios";
 
 const app = express();
@@ -9,15 +10,11 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173", 
-    methods: ["GET", "POST"],
+    origin: "*",
   },
 });
 
 const rooms = new Map();
-
-const CLIENT_ID = process.env.CLIENT_ID; 
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
 
 io.on("connection", (socket) => {
   console.log("User Connected", socket.id);
@@ -28,8 +25,11 @@ io.on("connection", (socket) => {
   socket.on("join", ({ roomId, userName }) => {
     if (currentRoom) {
       socket.leave(currentRoom);
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom)));
+      rooms.get(currentRoom).users.delete(currentUser);
+      io.to(currentRoom).emit(
+        "userJoined",
+        Array.from(rooms.get(currentRoom).users)
+      );
     }
 
     currentRoom = roomId;
@@ -38,22 +38,30 @@ io.on("connection", (socket) => {
     socket.join(roomId);
 
     if (!rooms.has(roomId)) {
-      rooms.set(roomId, new Set());
+      rooms.set(roomId, { users: new Set(), code: "// start code here" });
     }
 
-    rooms.get(roomId).add(userName);
+    rooms.get(roomId).users.add(userName);
 
-    io.to(roomId).emit("userJoined", Array.from(rooms.get(currentRoom)));
+    socket.emit("codeUpdate", rooms.get(roomId).code);
+
+    io.to(roomId).emit("userJoined", Array.from(rooms.get(currentRoom).users));
   });
 
   socket.on("codeChange", ({ roomId, code }) => {
+    if (rooms.has(roomId)) {
+      rooms.get(roomId).code = code;
+    }
     socket.to(roomId).emit("codeUpdate", code);
   });
 
   socket.on("leaveRoom", () => {
     if (currentRoom && currentUser) {
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom)));
+      rooms.get(currentRoom).users.delete(currentUser);
+      io.to(currentRoom).emit(
+        "userJoined",
+        Array.from(rooms.get(currentRoom).users)
+      );
 
       socket.leave(currentRoom);
 
@@ -70,37 +78,53 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("languageUpdate", language);
   });
 
-  socket.on("compileCode", async ({ code, roomId, language, versionIndex, stdin }) => {
-    try {
-      const response = await axios.post("https://api.jdoodle.com/v1/execute", {
-        script: code,
-        language,
-        versionIndex,  
-        stdin, 
-        clientId: process.env.CLIENT_ID ,
-        clientSecret: process.env.CLIENT_SECRET,
-      });
-  
-      console.log("JDoodle Response:", response.data);
-  
-      io.to(roomId).emit("codeResponse", response.data);
-    } catch (error) {
-      console.error("JDoodle API Error:", error.response?.data || error.message);
-      io.to(roomId).emit("codeResponse", { output: "Error executing code" });
+  socket.on(
+    "compileCode",
+    async ({ code, roomId, language, version, input }) => {
+      if (rooms.has(roomId)) {
+        const room = rooms.get(roomId);
+        const response = await axios.post(
+          "https://emkc.org/api/v2/piston/execute",
+          {
+            language,
+            version,
+            files: [
+              {
+                content: code,
+              },
+            ],
+            stdin: input,
+          }
+        );
+
+        room.output = response.data.run.output;
+        io.to(roomId).emit("codeResponse", response.data);
+      }
     }
-  });
+  );
 
   socket.on("disconnect", () => {
     if (currentRoom && currentUser) {
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom)));
+      rooms.get(currentRoom).users.delete(currentUser);
+      io.to(currentRoom).emit(
+        "userJoined",
+        Array.from(rooms.get(currentRoom).users)
+      );
     }
-    console.log("User Disconnected");
+    console.log("user Disconnected");
   });
 });
 
 const port = process.env.PORT || 5000;
 
+const __dirname = path.resolve();
+
+app.use(express.static(path.join(__dirname, "/frontend/dist")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
+});
+
 server.listen(port, () => {
-  console.log(`Server is working on port ${port}`);
+  console.log("server is working on port 5000");
 });

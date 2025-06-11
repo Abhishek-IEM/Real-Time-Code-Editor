@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import io from "socket.io-client";
 import Editor from "@monaco-editor/react";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuid } from "uuid";
 
-const socket = io("https://realtime-code-editor-final.onrender.com");
+const socket = io("http://localhost:5000");
 
 const App = () => {
   const [joined, setJoined] = useState(false);
@@ -17,12 +17,6 @@ const App = () => {
   const [typing, setTyping] = useState("");
   const [outPut, setOutPut] = useState("");
   const [version, setVersion] = useState("*");
-
-  const generateRoomId = () => {
-    const newRoomId = uuidv4().replace(/-/g, "").substring(0, 10); 
-    setRoomId(newRoomId);
-  };
-  
 
   useEffect(() => {
     socket.on("userJoined", (users) => {
@@ -101,8 +95,21 @@ const App = () => {
     socket.emit("languageChange", { roomId, language: newLanguage });
   };
 
+  const [userInput, setUserInput] = useState("");
+
   const runCode = () => {
-    socket.emit("compileCode", { code, roomId, language, version });
+    socket.emit("compileCode", {
+      code,
+      roomId,
+      language,
+      version,
+      input: userInput,
+    });
+  };
+
+  const createRoomId = () => {
+    const roomId = uuid();
+    setRoomId(roomId);
   };
 
   if (!joined) {
@@ -116,6 +123,9 @@ const App = () => {
             value={roomId}
             onChange={(e) => setRoomId(e.target.value)}
           />
+          <button className="create" onClick={createRoomId}>
+            CREATE ID
+          </button>
           <input
             type="text"
             placeholder="Your Name"
@@ -123,7 +133,6 @@ const App = () => {
             onChange={(e) => setUserName(e.target.value)}
           />
           <button onClick={joinRoom}>Join Room</button>
-          <button onClick={generateRoomId}>Generate Room ID</button>
         </div>
       </div>
     );
@@ -142,9 +151,10 @@ const App = () => {
         <h3>Users in Room:</h3>
         <ul>
           {users.map((user, index) => (
-            <li key={index}>{user.slice(0, 8)}...</li>
+            <li key={index}>{user}</li>
           ))}
         </ul>
+
         <p className="typing-indicator">{typing}</p>
         <select
           className="language-selector"
@@ -173,6 +183,12 @@ const App = () => {
             minimap: { enabled: false },
             fontSize: 14,
           }}
+        />
+        <textarea
+          className="input-console"
+          value={userInput}
+          onChange={(e) => setUserInput(e.target.value)}
+          placeholder="Enter input here..."
         />
         <button className="run-btn" onClick={runCode}>
           Execute

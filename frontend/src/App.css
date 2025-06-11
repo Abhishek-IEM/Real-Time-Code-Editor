@@ -17,8 +17,6 @@ body {
   height: 100vh;
   background: linear-gradient(135deg, #ff9a9e 0%, #c5a299 100%);
 
-
-
   .join-form {
     background-color: #fff;
     padding: 2rem;
@@ -173,10 +171,26 @@ body {
   height: 200px;
 }
 
-body::-webkit-scrollbar{
+body::-webkit-scrollbar {
   display: none;
 }
 
-.generate{
+.generate {
   cursor: pointer;
+}
+
+.create {
+  margin-bottom: 10px;
+}
+
+.input-console {
+  width: 100%;
+  height: 80px;
+  margin-top: 10px;
+  padding: 10px;
+  font-family: monospace;
+  background-color: #1e1e1e;
+  color: white;
+  border: 1px solid #444;
+  resize: none;
 }
