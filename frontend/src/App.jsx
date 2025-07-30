@@ -8,8 +8,10 @@ const socket = io("https://real-time-code-editor-2-0dnd.onrender.com");
 
 const App = () => {
   const [joined, setJoined] = useState(false);
-  const [roomId, setRoomId] = useState("");
-  const [userName, setUserName] = useState("");
+  const [roomId, setRoomId] = useState(localStorage.getItem("roomId") || "");
+  const [userName, setUserName] = useState(
+    localStorage.getItem("userName") || ""
+  );
   const [language, setLanguage] = useState("javascript");
   const [code, setCode] = useState("// start code here");
   const [copySuccess, setCopySuccess] = useState("");
@@ -17,25 +19,23 @@ const App = () => {
   const [typing, setTyping] = useState("");
   const [outPut, setOutPut] = useState("");
   const [version, setVersion] = useState("*");
+  const [userInput, setUserInput] = useState("");
 
   useEffect(() => {
-    socket.on("userJoined", (users) => {
-      setUsers(users);
-    });
+    if (roomId && userName) {
+      socket.emit("join", { roomId, userName });
+      setJoined(true);
+    }
+  }, []);
 
-    socket.on("codeUpdate", (newCode) => {
-      setCode(newCode);
-    });
-
+  useEffect(() => {
+    socket.on("userJoined", (users) => setUsers(users));
+    socket.on("codeUpdate", (newCode) => setCode(newCode));
     socket.on("userTyping", (user) => {
       setTyping(`${user.slice(0, 8)}... is Typing`);
       setTimeout(() => setTyping(""), 2000);
     });
-
-    socket.on("languageUpdate", (newLanguage) => {
-      setLanguage(newLanguage);
-    });
-
+    socket.on("languageUpdate", (newLanguage) => setLanguage(newLanguage));
     socket.on("codeResponse", (response) => {
       setOutPut(response.run.output);
     });
@@ -53,9 +53,7 @@ const App = () => {
     const handleBeforeUnload = () => {
       socket.emit("leaveRoom");
     };
-
     window.addEventListener("beforeunload", handleBeforeUnload);
-
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
@@ -65,6 +63,8 @@ const App = () => {
     if (roomId && userName) {
       socket.emit("join", { roomId, userName });
       setJoined(true);
+      localStorage.setItem("roomId", roomId);
+      localStorage.setItem("userName", userName);
     }
   };
 
@@ -75,6 +75,8 @@ const App = () => {
     setUserName("");
     setCode("// start code here");
     setLanguage("javascript");
+    localStorage.removeItem("roomId");
+    localStorage.removeItem("userName");
   };
 
   const copyRoomId = () => {
@@ -95,8 +97,6 @@ const App = () => {
     socket.emit("languageChange", { roomId, language: newLanguage });
   };
 
-  const [userInput, setUserInput] = useState("");
-
   const runCode = () => {
     socket.emit("compileCode", {
       code,
@@ -108,8 +108,8 @@ const App = () => {
   };
 
   const createRoomId = () => {
-    const roomId = uuid();
-    setRoomId(roomId);
+    const shortId = uuid().replace(/-/g, "").slice(0, 10);
+    setRoomId(shortId);
   };
 
   if (!joined) {
@@ -154,7 +154,6 @@ const App = () => {
             <li key={index}>{user}</li>
           ))}
         </ul>
-
         <p className="typing-indicator">{typing}</p>
         <select
           className="language-selector"
@@ -173,7 +172,7 @@ const App = () => {
 
       <div className="editor-wrapper">
         <Editor
-          height={"60%"}
+          height="50%"
           defaultLanguage={language}
           language={language}
           value={code}
