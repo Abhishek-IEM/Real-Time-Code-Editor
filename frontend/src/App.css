@@ -230,3 +230,7 @@ body::-webkit-scrollbar {
     border-color: #4a90e2;
   }
 }
+
+.join-form{
+  padding: 20px;
+}
