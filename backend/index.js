@@ -5,7 +5,6 @@ import path from "path";
 import axios from "axios";
 
 const app = express();
-
 const server = http.createServer(app);
 
 const io = new Server(server, {
@@ -20,32 +19,30 @@ io.on("connection", (socket) => {
   console.log("User Connected", socket.id);
 
   let currentRoom = null;
-  let currentUser = null;
 
   socket.on("join", ({ roomId, userName }) => {
     if (currentRoom) {
       socket.leave(currentRoom);
-      rooms.get(currentRoom).users.delete(currentUser);
+      rooms.get(currentRoom)?.users?.delete(socket.id);
       io.to(currentRoom).emit(
         "userJoined",
-        Array.from(rooms.get(currentRoom).users)
+        Array.from(rooms.get(currentRoom)?.users?.values() || [])
       );
     }
 
     currentRoom = roomId;
-    currentUser = userName;
-
     socket.join(roomId);
 
     if (!rooms.has(roomId)) {
-      rooms.set(roomId, { users: new Set(), code: "// start code here" });
+      rooms.set(roomId, { users: new Map(), code: "// start code here" });
     }
 
-    rooms.get(roomId).users.add(userName);
+    const room = rooms.get(roomId);
+    room.users.set(socket.id, userName);
 
-    socket.emit("codeUpdate", rooms.get(roomId).code);
-
-    io.to(roomId).emit("userJoined", Array.from(rooms.get(currentRoom).users));
+    socket.emit("codeUpdate", room.code);
+    io.to(roomId).emit("userJoined", Array.from(room.users.values()));
+    socket.emit("joined", { success: true, roomId, userName });
   });
 
   socket.on("codeChange", ({ roomId, code }) => {
@@ -56,17 +53,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("leaveRoom", () => {
-    if (currentRoom && currentUser) {
-      rooms.get(currentRoom).users.delete(currentUser);
-      io.to(currentRoom).emit(
-        "userJoined",
-        Array.from(rooms.get(currentRoom).users)
-      );
-
+    if (currentRoom && rooms.has(currentRoom)) {
+      const room = rooms.get(currentRoom);
+      room.users.delete(socket.id);
+      io.to(currentRoom).emit("userJoined", Array.from(room.users.values()));
       socket.leave(currentRoom);
-
       currentRoom = null;
-      currentUser = null;
     }
   });
 
@@ -82,41 +74,42 @@ io.on("connection", (socket) => {
     "compileCode",
     async ({ code, roomId, language, version, input }) => {
       if (rooms.has(roomId)) {
-        const room = rooms.get(roomId);
-        const response = await axios.post(
-          "https://emkc.org/api/v2/piston/execute",
-          {
-            language,
-            version,
-            files: [
-              {
-                content: code,
-              },
-            ],
-            stdin: input,
-          }
-        );
+        try {
+          const response = await axios.post(
+            "https://emkc.org/api/v2/piston/execute",
+            {
+              language,
+              version,
+              files: [
+                {
+                  content: code,
+                },
+              ],
+              stdin: input,
+            }
+          );
 
-        room.output = response.data.run.output;
-        io.to(roomId).emit("codeResponse", response.data);
+          io.to(roomId).emit("codeResponse", response.data);
+        } catch (err) {
+          io.to(roomId).emit("codeResponse", {
+            run: { output: "Compilation failed or server error." },
+          });
+        }
       }
     }
   );
 
   socket.on("disconnect", () => {
-    if (currentRoom && currentUser) {
-      rooms.get(currentRoom).users.delete(currentUser);
-      io.to(currentRoom).emit(
-        "userJoined",
-        Array.from(rooms.get(currentRoom).users)
-      );
+    if (currentRoom && rooms.has(currentRoom)) {
+      const room = rooms.get(currentRoom);
+      room.users.delete(socket.id);
+      io.to(currentRoom).emit("userJoined", Array.from(room.users.values()));
     }
-    console.log("user Disconnected");
+    console.log("User Disconnected", socket.id);
   });
 });
 
 const port = process.env.PORT || 5000;
-
 const __dirname = path.resolve();
 
 app.use(express.static(path.join(__dirname, "../frontend/dist")));
@@ -126,5 +119,5 @@ app.get("*", (req, res) => {
 });
 
 server.listen(port, () => {
-  console.log("server is working on port 5000");
+  console.log("Server is running on port", port);
 });
