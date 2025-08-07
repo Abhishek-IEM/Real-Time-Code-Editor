@@ -3,7 +3,7 @@
 A collaborative, real-time code editor that supports multiple programming languages with live code execution and synchronization across users — built using React, Node.js, WebSockets, and the Piston API.
 
 ## 🚀 Live Demo
-🌐 [https://real-time-code-editor-iota.vercel.app](https://real-time-code-editor-iota.vercel.app)
+🌐 https://real-time-code-editor-iota.vercel.app/
 
 ---
 
